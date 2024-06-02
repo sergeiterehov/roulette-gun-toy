@@ -38,6 +38,8 @@ class Game:
     total_shots = 0
     total_cards = 0
 
+    message: list[scenario.Chunk] = []
+
     def reset(self):
         self.state = State_idle
 
@@ -51,6 +53,9 @@ class Game:
 
         self.total_shots = 0
         self.total_cards = 0
+
+    def clear_message(self):
+        self.message.clear()
 
     def set_direction(self, forward: bool):
         self.pointed_forward = forward
@@ -83,11 +88,13 @@ class Game:
             self._exit()
 
     def _start(self):
+        self.clear_message()
         self._tell(scenario.master_called)
 
         self.state = State_ok_to_before_select_master
 
     def _before_select_master(self):
+        self.clear_message()
         self._tell(scenario.select_first_player)
 
         self.state = State_shut_to_select_master
@@ -95,7 +102,10 @@ class Game:
     def _select_master(self):
         self.first = random.choice([self.master, self.slave])
         master_first = self.first == self.master
+
         self.health.reset(4)
+
+        self.clear_message()
         self._tell(
             scenario.before_first_player_is_master
             if master_first
@@ -114,6 +124,7 @@ class Game:
     def _read_main_rules(self):
         master_first = self.first == self.master
 
+        self.clear_message()
         self._tell(scenario.main_rules)
         self._tell(scenario.prepare_cards)
         self._load()
@@ -134,6 +145,8 @@ class Game:
 
         is_forward = self.pointed_forward
         is_lethal = self.gun.shut()
+
+        self.clear_message()
 
         if not is_lethal:
             self._tell(scenario.change if is_forward else scenario.not_change)
@@ -177,22 +190,9 @@ class Game:
             self.score.put_winner(self.shutter)
 
             if self.score.is_final():
-                winner = self.score.get_leader()
-
-                self._tell(scenario.win_master if winner == self.master else scenario.win_slave)
-                self._tell(scenario.goodby)
-
                 self.state = State_ok_to_exit
-            else:
-                pass
 
             return
-
-        if self.total_cards == 0:
-            self._tell(scenario.before_explain_cards)
-
-            self._shuffle_cards()
-            self._give_cards()
 
         if self.gun.empty():
             self.state = State_reload_to_continue_shutting
@@ -200,6 +200,17 @@ class Game:
             self.state = State_ok_to_continue_shutting
 
     def _reload_and_continue_shutting(self):
+        self.shutter = self.first
+
+        if self.total_cards == 0:
+            self.clear_message()
+            self._tell(scenario.before_explain_cards)
+
+            self._shuffle_cards()
+
+        # TODO: перемешивать, если не осталось
+        self._give_cards()
+
         self._load()
 
         self.state = State_shut_to_play
@@ -208,7 +219,11 @@ class Game:
         self.state = State_shut_to_play
 
     def _exit(self):
-        self.reset()
+        winner = self.score.get_leader()
+
+        self.clear_message()
+        self._tell(scenario.win_master if winner == self.master else scenario.win_slave)
+        self._tell(scenario.goodby)
 
         self.state = State_idle
 
@@ -227,6 +242,7 @@ class Game:
 
         self._monit()
 
+        self.clear_message()
         self._tell(
             [
                 None,
@@ -279,6 +295,7 @@ class Game:
         self.total_cards += amount
         self._monit()
 
+        self.clear_message()
         self._tell(
             [
                 None,
@@ -291,7 +308,7 @@ class Game:
         )
 
     def _tell(self, chunk: scenario.Chunk):
-        print(chunk)
+        self.message.append(chunk)
 
     def _monit(self):
         print(
