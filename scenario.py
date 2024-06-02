@@ -1,4 +1,4 @@
-reading_speed_cps = 1300 # 13
+reading_speed_cps = 13
 """Chars per second"""
 
 class Chunk:

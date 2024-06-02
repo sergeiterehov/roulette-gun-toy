@@ -1,7 +1,6 @@
-from enum import Enum
 from player import Player
 
-class CardType(Enum):
+class CardType:
   LOOK = 1
   HEAL = 2
   EJECT = 3
@@ -29,7 +28,7 @@ class Cards:
   def __init__(self, players: list[Player], maximum: int = 8) -> None:
     self.maximum = maximum
 
-    for type in CardType:
+    for type in range(1,9):
       for _ in range(maximum):
         self.lib.append(Card(type))
 

@@ -1,227 +1,314 @@
 import random
-from time import sleep
+
 from player import Player
 from health import Health
+from score import Score
 from cards import Cards
 from gun import Gun
 import scenario
 
+State_idle = 0
+State_reload_to_start = 1
+State_ok_to_before_select_master = 2
+State_shut_to_select_master = 3
+State_ok_to_read_main_rules = 4
+State_shut_to_play = 5
+State_ok_to_continue_shutting = 6
+State_reload_to_continue_shutting = 7
+State_ok_to_exit = 8
+
+
 class Game:
-  gun = Gun()
+    state = State_idle
 
-  master = Player()
-  slave = Player()
+    gun = Gun()
+    pointed_forward = False
 
-  first = master
-  shutter = master
+    master = Player()
+    slave = Player()
 
-  health = Health([master, slave], maximum=5)
+    first = master
+    shutter = master
 
-  cards = Cards([master, slave], maximum=8)
+    score = Score(3)
+    health = Health([master, slave], maximum=5)
 
-  def reset(self):
-    self.gun.reset()
-    self.health.reset()
-    self.cards.reset()
-    self.first = self.master
-    self.shutter = self.master
+    cards = Cards([master, slave], maximum=8)
 
-  def begin(self):
-    self.tell(scenario.call_master)
-    self.wait_for_reload()
+    total_shots = 0
+    total_cards = 0
 
-    self.tell(scenario.master_called)
-    self.wait_for_click_ok()
+    def reset(self):
+        self.state = State_idle
 
-    self.tell(scenario.select_first_player)
-    self.wait_for_shut()
-    self.first = random.choice([self.master, self.slave])
-    master_first = self.first == self.master
-    self.health.reset(4)
-    self.tell(scenario.before_first_player_is_master if master_first else scenario.before_first_player_is_slave)
-    self.tell(scenario.first_player_is)
-    self.tell(scenario.first_player_is_master if master_first else scenario.first_player_is_slave)
-    self.tell(scenario.after_first_player_is)
-    self.wait_for_click_ok()
+        self.gun.reset()
+        self.pointed_forward = False
+        self.score.reset()
+        self.health.reset()
+        self.cards.reset()
+        self.first = self.master
+        self.shutter = self.master
 
-    self.tell(scenario.main_rules)
-    self.tell(scenario.prepare_cards)
-    self.load()
-    self.shutter = self.first
-    self.tell(scenario.order_is_unknown)
-    self.tell(scenario.shut_rules)
-    self.tell(scenario.first_master if master_first else scenario.first_slave)
-    self.tell(scenario.first_is_permanent)
+        self.total_shots = 0
+        self.total_cards = 0
 
-    winner: Player
+    def set_direction(self, forward: bool):
+        self.pointed_forward = forward
 
-    winner_1 = self.begin_shutting()
-    self.tell(scenario.round_of_master if winner_1 == self.master else scenario.round_of_slave)
+    def begin(self):
+        self._tell(scenario.call_master)
 
-    self.tell(scenario.info_screen_is_helpful) # TODO: это было бы прикольно после первого выстрела
-    self.tell(scenario.before_explain_cards)
+        self.state = State_reload_to_start
 
-    self.shuffle_cards()
-    self.give_cards()
+    def reload(self):
+        if self.state == State_reload_to_start:
+            self._start()
+        elif self.state == State_reload_to_continue_shutting:
+            self._reload_and_continue_shutting()
 
-    self.tell(scenario.explain_cards)
+    def shut(self):
+        if self.state == State_shut_to_select_master:
+            self._select_master()
+        elif self.state == State_shut_to_play:
+            self._shut()
 
-    self.load()
-    self.shutter = self.first
-    self.tell(scenario.first_master if master_first else scenario.first_slave)
+    def ok(self):
+        if self.state == State_ok_to_before_select_master:
+            self._before_select_master()
+        elif self.state == State_ok_to_read_main_rules:
+            self._read_main_rules()
+        elif self.state == State_ok_to_continue_shutting:
+            self._continue_shutting()
+        elif self.state == State_ok_to_exit:
+            self._exit()
 
-    winner_2 = self.begin_shutting()
+    def _start(self):
+        self._tell(scenario.master_called)
 
-    if winner_1 == winner_2:
-      winner = winner_1
-    else:
-      self.tell(scenario.round_of_master if winner_2 == self.master else scenario.round_of_slave)
-      self.tell(scenario.final)
+        self.state = State_ok_to_before_select_master
 
-      self.shuffle_cards()
-      self.tell(scenario.reorder_cards)
-      self.wait_for_click_ok()
+    def _before_select_master(self):
+        self._tell(scenario.select_first_player)
 
-      self.give_cards()
-      self.load()
-      self.shutter = self.first
-      self.tell(scenario.first_master if master_first else scenario.first_slave)
+        self.state = State_shut_to_select_master
 
-      winner_3 = self.begin_shutting()
+    def _select_master(self):
+        self.first = random.choice([self.master, self.slave])
+        master_first = self.first == self.master
+        self.health.reset(4)
+        self._tell(
+            scenario.before_first_player_is_master
+            if master_first
+            else scenario.before_first_player_is_slave
+        )
+        self._tell(scenario.first_player_is)
+        self._tell(
+            scenario.first_player_is_master
+            if master_first
+            else scenario.first_player_is_slave
+        )
+        self._tell(scenario.after_first_player_is)
 
-      winner = winner_1 if winner_1 == winner_3 else winner_2
+        self.state = State_ok_to_read_main_rules
 
-    self.tell(scenario.win_master if winner == self.master else scenario.win_slave)
-    self.tell(scenario.goodby)
+    def _read_main_rules(self):
+        master_first = self.first == self.master
 
-  def begin_shutting(self):
-    winner: Player
-  
-    while True:
-      if self.gun.empty():
-        self.load()
+        self._tell(scenario.main_rules)
+        self._tell(scenario.prepare_cards)
+        self._load()
+        self.shutter = self.first
+        self._tell(scenario.order_is_unknown)
+        self._tell(scenario.shut_rules)
+        self._tell(scenario.first_master if master_first else scenario.first_slave)
+        self._tell(scenario.first_is_permanent)
 
-      is_forward = self.wait_for_shut(with_direction=True)
-      is_live = self.gun.shut()
+        self.state = State_shut_to_play
 
-      if not is_live:
-        self.tell(scenario.change if is_forward else scenario.not_change)
-      else:
-        target: Player
+    def _shut(self):
+        if self.gun.empty():
+            # Но такого быть не должно!
+            return
 
-        if self.shutter == self.master: target = self.slave if is_forward else self.master
-        if self.shutter == self.slave: target = self.master if is_forward else self.slave
+        self.total_shots += 1
 
-        winner = self.master if target == self.slave else self.slave
+        is_forward = self.pointed_forward
+        is_lethal = self.gun.shut()
 
-        self.health.reduce(player=target)
+        if not is_lethal:
+            self._tell(scenario.change if is_forward else scenario.not_change)
 
-        self.tell(random.choice([
-          scenario.after_shut_1,
-          scenario.after_shut_2,
-          scenario.after_shut_3,
-        ]))
+            self.shutter = self.slave if self.shutter == self.master else self.master
+            self._monit()
 
-      self.monit()
-      
-      if is_live: break
+            self.state = State_ok_to_continue_shutting
+            return
 
-    self.gun.reset()
+        victim: Player
 
-    return winner
+        if self.shutter == self.master:
+            victim = self.slave if is_forward else self.master
+        else:
+            victim = self.master if is_forward else self.slave
 
-  def load(self, amount: int = None, amount_live: int = None):
-    if amount == None: amount = random.randint(2, 8)
-    if amount_live == None: amount_live = round(random.randint(1, amount - 1))
+        self.health.reduce(victim)
+        self._monit()
 
-    amount_live = min(amount - 1, amount_live)
-    amount_dummy = amount - amount_live
-    cartridges = self.gun.make(amount_live, amount_dummy)
-    random.shuffle(cartridges)
+        self._tell(
+            random.choice(
+                [
+                    scenario.after_shut_1,
+                    scenario.after_shut_2,
+                    scenario.after_shut_3,
+                ]
+            )
+        )
 
-    self.gun.load(cartridges)
+        if self.total_shots == 1:
+            self._tell(scenario.info_screen_is_helpful)
 
-    self.monit()
+        if self.health.get(victim) <= 0:
+            self._tell(
+                scenario.round_of_master
+                if self.shutter == self.master
+                else scenario.round_of_slave
+            )
 
-    self.tell([
-      None,
-      None,
-      scenario.loaded_2,
-      scenario.loaded_3,
-      scenario.loaded_4,
-      scenario.loaded_5,
-      scenario.loaded_6,
-      scenario.loaded_7,
-      scenario.loaded_8,
-    ][amount])
-    self.tell([
-      None,
-      scenario.dummy_1,
-      scenario.dummy_2,
-      scenario.dummy_3,
-      scenario.dummy_4,
-      scenario.dummy_5,
-      scenario.dummy_6,
-      scenario.dummy_7,
-    ][amount_dummy])
-    self.tell([
-      None,
-      scenario.live_1,
-      scenario.live_2,
-      scenario.live_3,
-      scenario.live_4,
-      scenario.live_5,
-      scenario.live_6,
-      scenario.live_7,
-    ][amount_live])
+            self.score.put_winner(self.shutter)
 
-  def shuffle_cards(self):
-    self.cards.reset()
+            if self.score.is_final():
+                winner = self.score.get_leader()
 
-    stack = self.cards.make_stack()
-    random.shuffle(stack)
+                self._tell(scenario.win_master if winner == self.master else scenario.win_slave)
+                self._tell(scenario.goodby)
 
-  def give_cards(self, amount: int = None):
-    if amount == None: amount = random.randint(1, self.cards.maximum - 3)
+                self.state = State_ok_to_exit
+            else:
+                pass
 
-    self.cards.add(amount)
-    self.monit()
+            return
 
-    self.tell([
-      None,
-      scenario.take_1_cards,
-      scenario.take_2_cards,
-      scenario.take_3_cards,
-      scenario.take_4_cards,
-      scenario.take_5_cards,
-    ][amount])
+        if self.total_cards == 0:
+            self._tell(scenario.before_explain_cards)
 
-  def wait_for_reload(self):
-    input("RELOAD")
+            self._shuffle_cards()
+            self._give_cards()
 
-  def wait_for_shut(self, with_direction=False):
-    while True:
-      value = input("SHUT")
+        if self.gun.empty():
+            self.state = State_reload_to_continue_shutting
+        else:
+            self.state = State_ok_to_continue_shutting
 
-      if not with_direction: return None
+    def _reload_and_continue_shutting(self):
+        self._load()
 
-      if value == 'forward': return True
-      if value == 'back': return False
+        self.state = State_shut_to_play
 
-  def wait_for_click_ok(self):
-    input("OK")
-  
-  def tell(self, chunk: scenario.Chunk):
-    for char in chunk.text:
-      print(char, end='',flush=True)
-      sleep(chunk.duration / len(chunk.text))
+    def _continue_shutting(self):
+        self.state = State_shut_to_play
 
-    print('')
+    def _exit(self):
+        self.reset()
 
-  def monit(self):
-    print('[MONIT]: [!%s/%s]cases->(%s) health(%s:%s)' % (
-      self.gun.cartridges.count(True), len(self.gun.cartridges), ''.join(['X' if e else '0' for e in self.gun.history]),
-      self.health.get(self.master), self.health.get(self.slave),
-    ))
-    print('Master cards: %s' % ' | '.join(map(lambda c: c.type.name, self.cards.get_credit(self.master))))
-    print('Slave cards: %s' % ' | '.join(map(lambda c: c.type.name, self.cards.get_credit(self.slave))))
+        self.state = State_idle
+
+    def _load(self, amount: int = None, amount_live: int = None):
+        if amount == None:
+            amount = random.randint(2, 8)
+        if amount_live == None:
+            amount_live = round(random.randint(1, amount - 1))
+
+        amount_live = min(amount - 1, amount_live)
+        amount_dummy = amount - amount_live
+        cartridges = self.gun.make(amount_live, amount_dummy)
+        # random.shuffle(cartridges)
+
+        self.gun.load(cartridges)
+
+        self._monit()
+
+        self._tell(
+            [
+                None,
+                None,
+                scenario.loaded_2,
+                scenario.loaded_3,
+                scenario.loaded_4,
+                scenario.loaded_5,
+                scenario.loaded_6,
+                scenario.loaded_7,
+                scenario.loaded_8,
+            ][amount]
+        )
+        self._tell(
+            [
+                None,
+                scenario.dummy_1,
+                scenario.dummy_2,
+                scenario.dummy_3,
+                scenario.dummy_4,
+                scenario.dummy_5,
+                scenario.dummy_6,
+                scenario.dummy_7,
+            ][amount_dummy]
+        )
+        self._tell(
+            [
+                None,
+                scenario.live_1,
+                scenario.live_2,
+                scenario.live_3,
+                scenario.live_4,
+                scenario.live_5,
+                scenario.live_6,
+                scenario.live_7,
+            ][amount_live]
+        )
+
+    def _shuffle_cards(self):
+        self.cards.reset()
+
+        stack = self.cards.make_stack()
+        # random.shuffle(stack)
+
+    def _give_cards(self, amount: int = None):
+        if amount == None:
+            amount = random.randint(1, self.cards.maximum - 3)
+
+        self.cards.add(amount)
+        self.total_cards += amount
+        self._monit()
+
+        self._tell(
+            [
+                None,
+                scenario.take_1_cards,
+                scenario.take_2_cards,
+                scenario.take_3_cards,
+                scenario.take_4_cards,
+                scenario.take_5_cards,
+            ][amount]
+        )
+
+    def _tell(self, chunk: scenario.Chunk):
+        print(chunk)
+
+    def _monit(self):
+        print(
+            "[MONIT]: [!%s/%s]cases->(%s) health(%s:%s)"
+            % (
+                self.gun.cartridges.count(True),
+                len(self.gun.cartridges),
+                "".join(["X" if e else "0" for e in self.gun.history]),
+                self.health.get(self.master),
+                self.health.get(self.slave),
+            )
+        )
+        print(
+            "Master cards: %s"
+            % " | ".join([str(c.type) for c in self.cards.get_credit(self.master)])
+        )
+        print(
+            "Slave cards:  %s"
+            % " | ".join([str(c.type) for c in self.cards.get_credit(self.slave)])
+        )
