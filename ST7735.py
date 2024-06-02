@@ -177,7 +177,7 @@ class TFT(object) :
       wh = aSize
 
     px, py = aPos
-    width = wh[0] * aFont["Width"] + 1
+    width = wh[0] * aFont.width + 1
     for c in aString:
       self.char((px, py), c, aColor, aFont, wh)
       px += width
@@ -187,7 +187,7 @@ class TFT(object) :
         if nowrap:
           break
         else:
-          py += aFont["Height"] * wh[1] + 1
+          py += aFont.height * wh[1] + 1
           px = aPos[0]
 
 #   @micropython.native
@@ -199,16 +199,12 @@ class TFT(object) :
     if aFont == None:
       return
 
-    startchar = aFont['Start']
-    endchar = aFont['End']
+    charA = aFont.get_char(aChar)
 
-    ci = ord(aChar)
-    if (startchar <= ci <= endchar):
-      fontw = aFont['Width']
-      fonth = aFont['Height']
-      ci = (ci - startchar) * fontw
+    if not charA is None:
+      fontw = aFont.width
+      fonth = aFont.height
 
-      charA = aFont["Data"][ci:ci + fontw]
       px = aPos[0]
       if aSizes[0] <= 1 and aSizes[1] <= 1 :
         buf = bytearray(2 * fonth * fontw)

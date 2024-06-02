@@ -1,4 +1,3 @@
-
 #Font used for ST7735 display.
 
 #Each character uses 5 bytes.
