@@ -40,6 +40,8 @@ class Game:
 
     message: list[scenario.Chunk] = []
 
+    on_tell = None
+
     def reset(self):
         self.state = State_idle
 
@@ -309,6 +311,9 @@ class Game:
 
     def _tell(self, chunk: scenario.Chunk):
         self.message.append(chunk)
+
+        if not self.on_tell is None:
+            self.on_tell()
 
     def _monit(self):
         print(

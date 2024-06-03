@@ -1,4 +1,5 @@
 from machine import SPI, Pin
+import math
 
 from ST7735 import TFT
 from font import font
@@ -14,7 +15,9 @@ class Interface:
 
     game: Game
 
-    msg: str = ""
+    _message: str = ""
+    _message_scroll = 0
+    _message_flag = False
 
     def __init__(self, game: Game) -> None:
         self.game = game
@@ -24,10 +27,71 @@ class Interface:
 
         self.draw_layout()
 
+    def up(self):
+        self._message_scroll -= 1
+        self._message_flag = True
+        pass
+
+    def down(self):
+        self._message_scroll += 1
+        self._message_flag = True
+        pass
+
+    def set_message(self, new_message: str):
+        self._message = new_message
+        self._message_scroll = 0
+        self._message_flag = True
+
     def draw_layout(self):
         self.tft.fill(TFT.BLACK)
         self.tft.line((0, 64), (128, 64), TFT.WHITE)
         self.tft.line((0, 54), (128, 54), TFT.WHITE)
+
+    def draw_message(self):
+        if not self._message_flag:
+            return
+
+        self._message_flag = False
+
+        c_width = 5 + 1
+        c_height = 8 + 1
+        limit_per_line = 21
+        limit_lines = 4
+        limit_total = limit_per_line * limit_lines
+
+        message = self._message
+        length = len(message)
+
+        self._message_scroll = max(
+            0,
+            min(
+                math.ceil(length / limit_per_line) - limit_lines,
+                self._message_scroll,
+            ),
+        )
+
+        scroll_offset = limit_per_line * self._message_scroll
+
+        message = message[scroll_offset : scroll_offset + limit_total]
+        length = len(message)
+
+        x, y = 2, 16
+
+        full_rows = math.floor(length / limit_per_line)
+
+        if full_rows < limit_lines:
+            self.tft.fillrect(
+                (x, y + c_height * full_rows),
+                (128 - x, c_height * (limit_lines - full_rows)),
+                TFT.BLACK,
+            )
+
+        self.tft.text(
+            (x, y),
+            message,
+            TFT.WHITE,
+            font,
+        )
 
     def draw_stat(self):
         self.tft.text(
@@ -89,17 +153,4 @@ class Interface:
     def render(self, _):
         self.draw_stat()
 
-        newMsg = ""
-
-        for msg in self.game.message:
-            newMsg = newMsg + msg.text
-
-        if newMsg != self.msg:
-            self.msg = newMsg
-
-            self.tft.text(
-                (2, 20),
-                self.msg,
-                TFT.WHITE,
-                font,
-            )
+        self.draw_message()
