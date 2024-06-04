@@ -28,7 +28,7 @@ mpu = MPU6050(i2c)
 # Player
 df = DFPlayer(uart_id=1, tx_pin_id=10, rx_pin_id=9)
 time.sleep(0.2)
-df.volume(15)
+df.volume(20)
 
 # GAME
 game = Game()
@@ -42,16 +42,17 @@ playing_task = None
 
 
 async def play_audio(file=1, duration=0.0):
+    print("PLAY %s" % file)
     df.play(1, file)
     await asyncio.sleep(duration + 0.2)
 
     while df.is_playing() != 0:
         await asyncio.sleep(0.1)
 
+    print("PLAYED!! %s" % file)
+
 
 def handle_press_button(key):
-    print("KEY", key)
-
     if key == Button_reload:
         game.reload()
     elif key == Button_trigger:
@@ -67,10 +68,13 @@ def handle_press_button(key):
 async def play_messages():
     global playing_task
 
-    for msg in game.message:
-        await play_audio(msg.audio, msg.duration)
-
-    playing_task = None
+    try:
+        for msg in game.message:
+            await play_audio(msg.audio, msg.duration)
+    except asyncio.CancelledError:
+        raise
+    finally:
+        playing_task = None
 
 
 def handle_tell():
@@ -80,13 +84,9 @@ def handle_tell():
         # FIXME: нужно прерывать таску, даже если она исполняется. Не делать через event loop?
         playing_task.cancel()
 
-    loop = asyncio.get_event_loop()
-    playing_task = loop.create_task(play_messages())
+    playing_task = asyncio.create_task(play_messages())
 
-    message = ""
-
-    for msg in game.message:
-        message = message + msg.text
+    message = " ".join([msg.text for msg in game.message])
 
     interface.set_message(message)
 

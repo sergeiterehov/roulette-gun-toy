@@ -6,6 +6,7 @@ from score import Score
 from cards import Cards
 from gun import Gun
 import scenario
+import utils
 
 State_idle = 0
 State_reload_to_start = 1
@@ -16,6 +17,7 @@ State_shut_to_play = 5
 State_ok_to_continue_shutting = 6
 State_reload_to_continue_shutting = 7
 State_ok_to_exit = 8
+State_ok_to_continue_shutting_after_cards = 9
 
 
 class Game:
@@ -71,7 +73,7 @@ class Game:
         if self.state == State_reload_to_start:
             self._start()
         elif self.state == State_reload_to_continue_shutting:
-            self._reload_and_continue_shutting()
+            self._before_reload()
 
     def shut(self):
         if self.state == State_shut_to_select_master:
@@ -86,6 +88,8 @@ class Game:
             self._read_main_rules()
         elif self.state == State_ok_to_continue_shutting:
             self._continue_shutting()
+        elif self.state == State_ok_to_continue_shutting_after_cards:
+            self._reload_and_continue_shutting()
         elif self.state == State_ok_to_exit:
             self._exit()
 
@@ -151,8 +155,6 @@ class Game:
         self.clear_message()
 
         if not is_lethal:
-            self._tell(scenario.change if is_forward else scenario.not_change)
-
             self.shutter = self.slave if self.shutter == self.master else self.master
             self._monit()
 
@@ -193,25 +195,53 @@ class Game:
 
             if self.score.is_final():
                 self.state = State_ok_to_exit
+            else:
+                # FIXME: перезарядить, сдать карты и начать следующий раунд
+                self.state = State_reload_to_continue_shutting # FIXME: это временное решение
 
             return
 
+        self._tell(scenario.change if is_forward else scenario.not_change)
+
         if self.gun.empty():
+            self._tell(scenario.magazine_is_empty)
+
             self.state = State_reload_to_continue_shutting
         else:
             self.state = State_ok_to_continue_shutting
 
-    def _reload_and_continue_shutting(self):
-        self.shutter = self.first
+    def _before_reload(self):
+        self.clear_message()
 
         if self.total_cards == 0:
-            self.clear_message()
             self._tell(scenario.before_explain_cards)
 
+            # TODO: сейчас говорит перемешать, карты, а мы сами их выдаем здесь
             self._shuffle_cards()
 
         # TODO: перемешивать, если не осталось
-        self._give_cards()
+
+        amount = random.randint(1, self.cards.maximum - 3)
+
+        self.cards.add(amount)
+        self.total_cards += amount
+        self._monit()
+
+        self._tell(
+            [
+                None,
+                scenario.take_1_cards,
+                scenario.take_2_cards,
+                scenario.take_3_cards,
+                scenario.take_4_cards,
+                scenario.take_5_cards,
+            ][amount]
+        )
+
+        self.state = State_ok_to_continue_shutting_after_cards
+
+    def _reload_and_continue_shutting(self):
+        self.shutter = self.first
 
         self._load()
 
@@ -238,7 +268,7 @@ class Game:
         amount_live = min(amount - 1, amount_live)
         amount_dummy = amount - amount_live
         cartridges = self.gun.make(amount_live, amount_dummy)
-        # random.shuffle(cartridges)
+        utils.shuffle(cartridges)
 
         self.gun.load(cartridges)
 
@@ -287,27 +317,7 @@ class Game:
         self.cards.reset()
 
         stack = self.cards.make_stack()
-        # random.shuffle(stack)
-
-    def _give_cards(self, amount: int = None):
-        if amount == None:
-            amount = random.randint(1, self.cards.maximum - 3)
-
-        self.cards.add(amount)
-        self.total_cards += amount
-        self._monit()
-
-        self.clear_message()
-        self._tell(
-            [
-                None,
-                scenario.take_1_cards,
-                scenario.take_2_cards,
-                scenario.take_3_cards,
-                scenario.take_4_cards,
-                scenario.take_5_cards,
-            ][amount]
-        )
+        utils.shuffle(stack)
 
     def _tell(self, chunk: scenario.Chunk):
         self.message.append(chunk)
