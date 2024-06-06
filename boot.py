@@ -2,17 +2,20 @@ import micropython
 
 micropython.alloc_emergency_exception_buf(100)
 
-from machine import I2C, Pin, Timer
+from machine import SoftI2C, Pin, Timer, UART
 import asyncio
 import time
 
 from dfplayer import DFPlayer
 from mpu6050 import MPU6050
+from sh1107 import SH1107_I2C
 from game import Game
 from interface import Interface
 
 
 # components
+i2c = SoftI2C(scl=Pin(5), sda=Pin(4))
+uart = UART(1, 9600, bits=8, parity=None, stop=1, tx=10, rx=9)
 
 # Buttons
 Button_reload = 1
@@ -22,11 +25,10 @@ Button_up = 6
 Button_down = 8
 
 # MPU6050
-i2c = I2C(scl=Pin(5), sda=Pin(4))
 mpu = MPU6050(i2c)
 
 # Player
-df = DFPlayer(uart_id=1, tx_pin_id=10, rx_pin_id=9)
+df = DFPlayer(uart)
 time.sleep(0.2)
 df.volume(20)
 
@@ -34,7 +36,8 @@ df.volume(20)
 game = Game()
 
 # Интерфейс
-interface = Interface(game)
+display = SH1107_I2C(128, 64, i2c, address=60, rotate=0)
+interface = Interface(display)
 
 # Функции
 

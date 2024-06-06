@@ -1,82 +1,3 @@
-# MicroPython SH1107 OLED driver, I2C interfaces
-# tested with Raspberry Pi Pico and adafruit 1.12 inch QWIC OLED display
-# sh1107 driver v319
-__version__ = "v319"
-__repo__ = "https://github.com/peter-l5/SH1107"
-#
-# The MIT License (MIT)
-#
-# Copyright (c) 2016 Radomir Dopieralski (@deshipu),
-#               2017-2021 Robert Hammelrath (@robert-hh)
-#               2021 Tim Weber (@scy)
-#               2022-2023 Peter Lumb (peter-l5)
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-#
-#
-# Sample code sections for RaspberryPi Pico pin assignments
-# ------------ SPI ------------------
-# Pin Map SPI
-#   - 3v3 - xxxxxx   - Vcc
-#   - G   - xxxxxx   - Gnd
-#   - D7  - GPIO 15  - TX / MOSI fixed
-#   - D5  - GPIO 14  - SCK / Sck fixed
-#   - D8  - GPIO 13  - CS (optional, if the only connected device)
-#   - D2  - GPIO 21  - DC [Data/Command]
-#   - D1  - GPIO 20  - Res [reset]
-#
-# spi1 = SPI(1, baudrate=10_000_000, sck=Pin(14), mosi=Pin(15), miso=Pin(12))
-# display = sh1107.SH1107_SPI(128, 128, spi1, Pin(21), Pin(20), Pin(13))
-# display.sleep(False)
-# display.fill(0)
-# display.text('SH1107', 0, 0, 1)
-# display.text('driver', 0, 8, 1)
-# display.show()
-#
-# --------------- I2C ------------------
-#
-# reset PIN is not needed in some implementations
-# Pin Map I2C
-#   - 3v3 - xxxxxx   - Vcc
-#   - G   - xxxxxx   - Gnd
-#   - D2  - GPIO 5   - SCK / SCL
-#   - D1  - GPIO 4   - DIN / SDA
-#   - D0  - GPIO 16  - Res
-#   - G   - xxxxxx     CS
-#   - G  - xxxxxx     D/C
-#
-# using hardware I2C
-
-# from machine import Pin, I2C
-# import sh1107
-#
-# i2c0 = I2C(0, scl=Pin(5), sda=Pin(4), freq=400000)
-# display = sh1107.SH1107_I2C(128, 128, i2c0, address=0x3d, rotate=90)
-# display.sleep(False)
-# display.fill(0)
-# display.text('SH1107', 0, 0, 1)
-# display.text('driver', 0, 8, 1)
-# display.show()
-
-__version__ = "v317"
-__repo__ = "https://github.com/peter-l5/SH1107"
-
 ## SH1107 module code
 from micropython import const
 import time
@@ -295,6 +216,53 @@ class SH1107(framebuf.FrameBuffer):
     def text(self, text, x, y, c=1):
         super().text(text, x, y, c)
         self.register_updates(y, y + 7)
+
+    def text_area(self, text, px, py, font, scale=1, nowrap=False):
+        if font == None:
+            return
+
+        width = scale * font.width + 1
+        px_start = px
+
+        for char in text:
+            self.char(char, px, py, font, scale)
+
+            px += width
+
+            if px + width > self.width:
+                if nowrap:
+                    break
+
+                py += font.height * scale + 1
+                px = px_start
+
+    def char(self, char, px, py, font, scale=1):
+        if font == None:
+            return
+
+        charA = font.get_char(char)
+
+        if charA is None:
+            return
+
+        fontw = font.width
+        fonth = font.height
+
+        smallbuffer = bytearray(8)
+        letter = framebuf.FrameBuffer(smallbuffer, 5, 8, framebuf.MONO_HMSB)
+
+        x, y = 0, 0
+
+        for c in charA:
+            for r in range(fonth):
+                letter.fill_rect(x, y, scale, scale, c & 0x01)
+
+                y += scale
+                c >>= 1
+            x += scale
+            y = 0
+
+        self.blit(letter, px, py)
 
     def line(self, x0, y0, x1, y1, c):
         super().line(x0, y0, x1, y1, c)
