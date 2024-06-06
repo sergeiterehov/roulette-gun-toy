@@ -153,8 +153,8 @@ class Interface:
         self.display.text_area(
             "%i:%s"
             % (
-                0,
-                0,
+                self._master_hp,
+                self._slave_hp,
             ),
             2,
             56,
