@@ -46,6 +46,7 @@ playing_task = None
 
 async def play_audio(file=1, duration=0.0):
     print("PLAY %s" % file)
+
     df.play(1, file)
     await asyncio.sleep(duration + 0.2)
 
@@ -53,6 +54,18 @@ async def play_audio(file=1, duration=0.0):
         await asyncio.sleep(0.1)
 
     print("PLAYED!! %s" % file)
+
+
+async def play_messages():
+    global playing_task
+
+    try:
+        for msg in game.message:
+            await play_audio(msg.audio, msg.duration)
+    except asyncio.CancelledError:
+        raise
+    finally:
+        playing_task = None
 
 
 def handle_press_button(key):
@@ -68,18 +81,6 @@ def handle_press_button(key):
         interface.down()
 
 
-async def play_messages():
-    global playing_task
-
-    try:
-        for msg in game.message:
-            await play_audio(msg.audio, msg.duration)
-    except asyncio.CancelledError:
-        raise
-    finally:
-        playing_task = None
-
-
 def handle_tell():
     global playing_task
 
@@ -87,11 +88,18 @@ def handle_tell():
         # FIXME: нужно прерывать таску, даже если она исполняется. Не делать через event loop?
         playing_task.cancel()
 
-    playing_task = asyncio.create_task(play_messages())
+    # TODO: перестало работать :-(
+    # playing_task = asyncio.create_task(play_messages())
 
     message = " ".join([msg.text for msg in game.message])
 
     interface.set_message(message)
+
+
+def handle_monit():
+    interface.set_cartridges(game.gun.cartridges)
+    interface.set_hp(game.health.get(game.master), game.health.get(game.slave))
+    interface.set_shouter(game.shutter == game.master)
 
 
 def physics_loop(_):
@@ -101,11 +109,13 @@ def physics_loop(_):
     self_shot = rate > 0.65
 
     game.set_direction(not self_shot)
+    interface.set_direction_forward(not self_shot)
 
 
 # Подписки
 
 game.on_tell = handle_tell
+game.on_monit = handle_monit
 
 Pin(Button_reload, Pin.IN, Pin.PULL_UP).irq(
     handler=lambda t: micropython.schedule(handle_press_button, Button_reload),
@@ -145,5 +155,12 @@ Timer(1).init(
 game.reset()
 game.begin()
 
-while True:
-    asyncio.get_event_loop().run_forever()
+
+async def main():
+    while True:
+        # Это чтобы ampy не отваливался по таймауту
+        print("\0", end="")
+        await asyncio.sleep(3)
+
+
+asyncio.run(main())

@@ -13,6 +13,14 @@ class Interface:
     _message_scroll = 0
     _message_flag = False
 
+    _direction_forward = False
+    _cartridges: list[bool] = []
+    _master_hp = 0
+    _slave_hp = 0
+    _shouter_master = True
+
+    _status_flag = False
+
     def __init__(self, display: SH1107) -> None:
         self.display = display
 
@@ -21,12 +29,33 @@ class Interface:
     def up(self):
         self._message_scroll -= 1
         self._message_flag = True
-        pass
 
     def down(self):
         self._message_scroll += 1
         self._message_flag = True
-        pass
+
+    def set_cartridges(self, new_cartridges: list[bool]):
+        self._cartridges.clear()
+        for c in new_cartridges:
+            self._cartridges.append(c)
+        self._cartridges.sort()
+        self._status_flag = True
+
+    def set_hp(self, master: int, slave: int):
+        self._master_hp = master
+        self._slave_hp = slave
+        self._status_flag = True
+
+    def set_shouter(self, is_master: bool):
+        self._shouter_master = is_master
+        self._status_flag = True
+
+    def set_direction_forward(self, is_forward: bool):
+        if self._direction_forward == is_forward:
+            return
+
+        self._direction_forward = is_forward
+        self._status_flag = True
 
     def set_message(self, new_message: str):
         self._message = new_message
@@ -89,7 +118,38 @@ class Interface:
 
         self.display.show()
 
+    def draw_cartridges(self):
+        if not self._status_flag:
+            return
+
+        self._status_flag = False
+
+        amount = len(self._cartridges)
+
+        item_width = 3
+        item_height = 6
+
+        x_offset = WIDTH - amount * (item_width + 1)
+        y_offset = 56
+
+        self.display.fill_rect(
+            WIDTH - 8 * (item_width + 1), y_offset, WIDTH, item_height, 0
+        )
+
+        for i in range(amount):
+            is_lethal = self._cartridges[i]
+
+            x = x_offset + (item_width + 1) * i
+
+            if is_lethal:
+                self.display.fill_rect(x, y_offset, item_width, item_height, 1)
+            else:
+                self.display.rect(x, y_offset, item_width, item_height, 1)
+
+        self.display.show()
+
     def draw_stat(self):
+        self.display.fill_rect(0, 56, 75, font.height, 0)
         self.display.text_area(
             "%i:%s"
             % (
@@ -101,13 +161,17 @@ class Interface:
             font,
         )
         self.display.text_area(
-            "%i:%s"
-            % (
-                0,
-                0,
-            ),
-            2 + 30,
+            "ГЛАВНЫЙ" if self._shouter_master else "второй",
+            30,
             56,
+            font,
+        )
+
+        self.display.fill_rect(0, 0, WIDTH, font.height, 0)
+        self.display.text_area(
+            "В ДРУГОГО ИГРОКА" if self._direction_forward else "В СЕБЯ!",
+            0,
+            0,
             font,
         )
 
@@ -115,5 +179,6 @@ class Interface:
 
     def render(self, _):
         self.draw_stat()
+        self.draw_cartridges()
 
         self.draw_message()

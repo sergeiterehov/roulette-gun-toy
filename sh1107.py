@@ -225,6 +225,11 @@ class SH1107(framebuf.FrameBuffer):
         px_start = px
 
         for char in text:
+            if char == "\n":
+                py += font.height * scale + 1
+                px = px_start
+                continue
+
             self.char(char, px, py, font, scale)
 
             px += width

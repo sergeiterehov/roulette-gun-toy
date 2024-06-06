@@ -43,6 +43,7 @@ class Game:
     message: list[scenario.Chunk] = []
 
     on_tell = None
+    on_monit = None
 
     def reset(self):
         self.state = State_idle
@@ -197,7 +198,9 @@ class Game:
                 self.state = State_ok_to_exit
             else:
                 # FIXME: перезарядить, сдать карты и начать следующий раунд
-                self.state = State_reload_to_continue_shutting # FIXME: это временное решение
+                self.state = (
+                    State_reload_to_continue_shutting  # FIXME: это временное решение
+                )
 
             return
 
@@ -326,6 +329,9 @@ class Game:
             self.on_tell()
 
     def _monit(self):
+        if not self.on_monit is None:
+            self.on_monit()
+
         print(
             "[MONIT]: [!%s/%s]cases->(%s) health(%s:%s)"
             % (
