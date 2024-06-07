@@ -2,7 +2,7 @@ import micropython
 
 micropython.alloc_emergency_exception_buf(100)
 
-from machine import SoftI2C, Pin, Timer, UART
+from machine import SoftI2C, Pin, Timer, UART, SoftSPI
 import asyncio
 import time
 
@@ -10,12 +10,24 @@ from dfplayer import DFPlayer
 from mpu6050 import MPU6050
 from sh1107 import SH1107_I2C
 from game import Game
+from known_cards import known_cards
 from interface import Interface
+from mfrc522 import MFRC522
 
 
 # components
 i2c = SoftI2C(scl=Pin(5), sda=Pin(4))
 uart = UART(1, 9600, bits=8, parity=None, stop=1, tx=10, rx=9)
+spi = SoftSPI(
+    baudrate=500000,
+    polarity=0,
+    phase=0,
+    sck=35,
+    mosi=37,
+    miso=38,
+)
+rfid_rst = Pin(39, Pin.OUT)
+rfid_cs = Pin(36, Pin.OUT)
 
 # Buttons
 Button_reload = 1
@@ -31,6 +43,9 @@ mpu = MPU6050(i2c)
 df = DFPlayer(uart)
 time.sleep(0.2)
 df.volume(20)
+
+# RFID
+rfid = MFRC522(spi, rfid_rst, rfid_cs)
 
 # GAME
 game = Game()
@@ -150,17 +165,49 @@ Timer(1).init(
     callback=lambda t: micropython.schedule(physics_loop, 0),
 )
 
-# Запуск игры
 
-game.reset()
-game.begin()
+def rfid_read():
+    (stat, tag_type) = rfid.request(rfid.REQIDL)
+
+    if stat != rfid.OK:
+        return
+
+    (stat, raw_uid) = rfid.anticoll()
+
+    if stat != rfid.OK:
+        print("Failed to select tag")
+        return
+
+    uid = int.from_bytes(bytearray([raw_uid[0], raw_uid[1], raw_uid[2], raw_uid[3]]), "big")
+
+    print("New card detected: %s (type %s)" % (hex(uid), tag_type))
+
+    card_type = known_cards.get(uid)
+
+    if card_type is None:
+        return
+
+    game.init_card(card_type)
+
+
+async def rfid_loop():
+    while True:
+        rfid_read()
+        await asyncio.sleep(1)
 
 
 async def main():
+    asyncio.create_task(rfid_loop())
+
     while True:
         # Это чтобы ampy не отваливался по таймауту
         print("\0", end="")
         await asyncio.sleep(3)
 
+
+# Запуск игры
+
+game.reset()
+game.begin()
 
 asyncio.run(main())

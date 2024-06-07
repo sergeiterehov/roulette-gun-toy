@@ -2,6 +2,8 @@ import math
 from sh1107 import SH1107
 from font import font
 
+# https://github.com/peter-l5/SH1107/blob/main/sh1107%20demo%20v319%20i2c%20128x64.py
+
 WIDTH = 128
 HEIGHT = 64
 

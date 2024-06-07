@@ -3,10 +3,19 @@ import random
 from player import Player
 from health import Health
 from score import Score
-from cards import Cards
+from cards import Cards, CardType
 from gun import Gun
 import scenario
 import utils
+
+
+class State:
+    IDLE = 1
+    SELECT_MASTER = 2
+    SHUTTING = 3
+    EMPTY_MAGAZINE = 4
+    DONE = 5
+
 
 State_idle = 0
 State_reload_to_start = 1
@@ -59,8 +68,14 @@ class Game:
         self.total_shots = 0
         self.total_cards = 0
 
-    def clear_message(self):
-        self.message.clear()
+    def init_card(self, card: CardType):
+        # TODO: использование карт
+        self._clear_message()
+
+        if card == CardType.EJECT:
+            self._tell(scenario.card_eject)
+        elif card == CardType.HEAL:
+            self._tell(scenario.card_heal)
 
     def set_direction(self, forward: bool):
         self.pointed_forward = forward
@@ -95,13 +110,13 @@ class Game:
             self._exit()
 
     def _start(self):
-        self.clear_message()
+        self._clear_message()
         self._tell(scenario.master_called)
 
         self.state = State_ok_to_before_select_master
 
     def _before_select_master(self):
-        self.clear_message()
+        self._clear_message()
         self._tell(scenario.select_first_player)
 
         self.state = State_shut_to_select_master
@@ -112,7 +127,7 @@ class Game:
 
         self.health.reset(4)
 
-        self.clear_message()
+        self._clear_message()
         self._tell(
             scenario.before_first_player_is_master
             if master_first
@@ -131,7 +146,7 @@ class Game:
     def _read_main_rules(self):
         master_first = self.first == self.master
 
-        self.clear_message()
+        self._clear_message()
         self._tell(scenario.main_rules)
         self._tell(scenario.prepare_cards)
         self._load()
@@ -153,7 +168,7 @@ class Game:
         is_forward = self.pointed_forward
         is_lethal = self.gun.shut()
 
-        self.clear_message()
+        self._clear_message()
 
         if not is_lethal:
             self.shutter = self.slave if self.shutter == self.master else self.master
@@ -214,7 +229,7 @@ class Game:
             self.state = State_ok_to_continue_shutting
 
     def _before_reload(self):
-        self.clear_message()
+        self._clear_message()
 
         if self.total_cards == 0:
             self._tell(scenario.before_explain_cards)
@@ -256,7 +271,7 @@ class Game:
     def _exit(self):
         winner = self.score.get_leader()
 
-        self.clear_message()
+        self._clear_message()
         self._tell(scenario.win_master if winner == self.master else scenario.win_slave)
         self._tell(scenario.goodby)
 
@@ -277,7 +292,7 @@ class Game:
 
         self._monit()
 
-        self.clear_message()
+        self._clear_message()
         self._tell(
             [
                 None,
@@ -321,6 +336,9 @@ class Game:
 
         stack = self.cards.make_stack()
         utils.shuffle(stack)
+
+    def _clear_message(self):
+        self.message.clear()
 
     def _tell(self, chunk: scenario.Chunk):
         self.message.append(chunk)
