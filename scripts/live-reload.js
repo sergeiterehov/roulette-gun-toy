@@ -37,7 +37,7 @@ const exec = async (command, signal) => {
   proc.stderr.on("data", (b) => process.stderr.write(b))
 
   if (!proc.killed) {
-    await new Promise((resolve, reject) => proc.once("exit", (c) => c ? reject() : resolve()))
+    await new Promise((resolve, reject) => proc.once("exit", (c) => c !== 0 ? reject() : resolve()))
   }
 }
 
@@ -45,6 +45,12 @@ const run = async (signal) => {
   console.log("Running...")
 
   await exec(`ampy -p ${port} run boot.py`, signal)
+}
+
+const reset = async (signal) => {
+  console.log("Resetting...")
+
+  await exec(`ampy -p ${port} reset`, signal)
 }
 
 const upload = async (filepath, signal) => {
@@ -94,10 +100,12 @@ fs.watch(cwd, async (eventType, filename) => {
     const filepath = path.join(cwd, filename);
     const exists = fs.existsSync(filepath);
 
-    const action = eventType === "change" ? "changed" : exists ? "removed" : "created";
+    const action = eventType === "change" ? "changed" : exists ? "created" : "removed";
 
     console.clear();
     console.log(`[${action}] ${filename}`);
+
+    await reset(abort.signal)
 
     if (action === "changed" || action === "created") {
       await upload(filepath, abort.signal)
