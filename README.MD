@@ -58,6 +58,8 @@
 
 Разрабатывается в https://cad.onshape.com
 
+![Скриншот из CAD](doc/cad_demo.png)
+
 ## ПРОБЛЕМЫ
 
 - Как прерывать задачи в asyncio?
