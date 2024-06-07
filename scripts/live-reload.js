@@ -19,42 +19,57 @@ for (let i = 0; i < process.argv; i += 1) {
 const cwd = process.cwd()
 const port = args.port || "/dev/cu.usbmodem1234561"
 
-let abort = new AbortController()
+const delay = (ms, signal) => new Promise((resolve, reject) => {
+  const timer = setTimeout(resolve, ms)
 
-const run = () => {
-  if (!abort.signal.aborted) {
-    abort.abort();
-  }
+  signal.addEventListener("abort", () => {
+    clearTimeout(timer)
+    reject()
+  })
+})
 
-  abort = new AbortController()
+const exec = async (command, signal) => {
+  const proc = cp.exec(command)
 
-  const proc = cp.exec(`ampy -p ${port} run boot.py`, { signal: abort.signal })
-
-  proc.stdin.write("\n")
+  signal.addEventListener("abort", () => proc.kill(9))
 
   proc.stdout.on("data", (b) => process.stdout.write(b))
   proc.stderr.on("data", (b) => process.stderr.write(b))
-}
 
-const upload = (filepath) => {
-  console.log("Uploading...")
-
-  try {
-    const res = cp.execSync(`ampy -p ${port} put ${filepath}`)
-    console.log(`UPLOADING RESULT: ${res.toString("utf8")}`)
-  } catch (e) {
-    console.error(`UPLOADING !ERROR!:`);
+  if (!proc.killed) {
+    await new Promise((resolve, reject) => proc.once("exit", (c) => c ? reject() : resolve()))
   }
 }
 
-const remove = (filename) => {
+const run = async (signal) => {
+  console.log("Running...")
+
+  await exec(`ampy -p ${port} run boot.py`, signal)
+}
+
+const upload = async (filepath, signal) => {
+  console.log("Uploading...")
+
+  try {
+    await exec(`ampy -p ${port} put ${filepath}`, signal)
+
+    console.log(`UPLOADED`)
+  } catch (e) {
+    console.error(`UPLOADING !ERROR!:`);
+    throw e
+  }
+}
+
+const remove = async (filename, signal) => {
   console.log("Removing!!!")
 
   try {
-    const res = cp.execSync(`ampy -p ${port} rm ${filename}`)
-    console.log(`REMOVING RESULT: ${res.toString("utf8")}`)
+    await exec(`ampy -p ${port} rm ${filename}`, sinal)
+
+    console.log(`REMOVED`)
   } catch (e) {
     console.error(`REMOVING !ERROR!`);
+    throw e
   }
 }
 
@@ -62,22 +77,36 @@ console.clear();
 console.log(`DEVICE ${port}`);
 console.log(`WATCHING ${cwd} ...`);
 
-fs.watch(cwd, (eventType, filename) => {
+let abort = new AbortController()
+
+fs.watch(cwd, async (eventType, filename) => {
   if (!filename.endsWith(".py") || filename.endsWith(".host.py")) return;
 
-  const filepath = path.join(cwd, filename);
-  const exists = fs.existsSync(filepath);
+  if (!abort.signal.aborted) abort.abort();
 
-  const action = eventType === "change" ? "changed" : exists ? "removed" : "created";
+  console.log(`[action detected]`);
 
-  console.clear();
-  console.log(`[${action}] ${filename}`);
+  abort = new AbortController()
 
-  if (action === "changed" || action === "created") {
-    upload(filepath)
-  } else if (action === "removed") {
-    remove(filename)
+  try {
+    await delay(1000, abort.signal)
+
+    const filepath = path.join(cwd, filename);
+    const exists = fs.existsSync(filepath);
+
+    const action = eventType === "change" ? "changed" : exists ? "removed" : "created";
+
+    console.clear();
+    console.log(`[${action}] ${filename}`);
+
+    if (action === "changed" || action === "created") {
+      await upload(filepath, abort.signal)
+    } else if (action === "removed") {
+      await remove(filename, abort.signal)
+    }
+
+    await run(abort.signal)
+  } catch (e) {
+    console.log("ABORTED!")
   }
-
-  run()
 })
