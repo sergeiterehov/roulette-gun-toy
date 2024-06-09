@@ -1,23 +1,33 @@
 class Gun:
-  history: list[bool] = []
-  cartridges: list[bool] = []
+    history: list[bool] = []
+    cartridges: list[bool] = []
 
-  def reset(self):
-    self.history = []
-    self.cartridges = []
+    capacity = 0
 
-  def empty(self):
-    return len(self.cartridges) == 0
+    def __init__(self, capacity: int = 8):
+        self.capacity = capacity
 
-  def make(self, live: int, dummy: int) -> list[bool]:
-    return [True for _ in range(live)] + [False for _ in range(dummy)]
+    def reset(self):
+        self.history = []
+        self.cartridges = []
 
-  def load(self, cartridges: list[bool]):
-    self.history = []
-    self.cartridges = cartridges
+    def empty(self):
+        return len(self.cartridges) == 0
 
-  def shut(self):
-    cartridge = self.cartridges.pop()
-    self.history.append(cartridge)
+    def make(self, live: int, dummy: int) -> list[bool]:
+        return [True for _ in range(live)] + [False for _ in range(dummy)]
 
-    return cartridge
+    def load(self, cartridges: list[bool]):
+        self.history = []
+        self.cartridges = cartridges
+
+    def shut(self):
+        cartridge = self.cartridges.pop()
+        self.history.append(cartridge)
+
+        return cartridge
+
+    def invert_current(self):
+        prev = self.cartridges.pop()
+        next = not prev
+        self.cartridges.append(next)

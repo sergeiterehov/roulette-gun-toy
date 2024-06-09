@@ -47,7 +47,7 @@ df = DFPlayer(uart)
 time.sleep(0.1)
 df.reset()
 time.sleep(0.1)
-df.volume(20)  # TODO: не хватает питания для большей громкости. плохой контакт??
+df.volume(15)  # TODO: не хватает питания для большей громкости. плохой контакт??
 time.sleep(0.1)
 df.play(1, 1)
 
@@ -75,11 +75,12 @@ async def play_messages():
         for msg in game.message:
             print("PLAY %s/%s" % (msg.folder, msg.audio))
 
-            df.play(msg.folder, msg.audio)
-            await asyncio.sleep(msg.duration + 0.2)
+            if msg.audio:
+                df.play(msg.folder, msg.audio)
 
-            while df.is_playing() != 0:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(msg.duration + 0.2)
+                while df.is_playing() != 0:
+                    await asyncio.sleep(0.1)
 
             print("PLAYED!!")
     except asyncio.CancelledError:

@@ -11,21 +11,25 @@ class Folder:
 
 class Chunk:
     text = ""
-    audio = 0
+    audio: int | None = None
     duration = 0
     folder = 1
+
+    def silent(text: str):
+        """Без озвучки"""
+        return Chunk(text, None)
 
     def __init__(
         self,
         text: str,
-        audio: int = 0,
-        duration: float = None,
+        audio: int = None,
+        duration: float = 0,
         folder: int = Folder.SARAH,
     ):
         self.text = text.replace("\n", " ")
         self.audio = audio
         self.folder = folder
-        self.duration = len(text) / reading_speed_cps if duration is None else duration
+        self.duration = duration
 
 
 call_master = Chunk(
@@ -71,7 +75,7 @@ after_first_player_is = Chunk(
 main_rules = Chunk(
     """В этой игре 3 раунда.
 Кто выиграет 2 раунда - победил.
-В каждом раунде у вас будет по несколько единицы здоровья.
+В каждом раунде у вас будет по несколько единиц здоровья.
 Здоровье отнимается выстрелом. Удивительно, да?
 У кого здоровье закончится первым, тот и отъехал в этом раунде. То есть проиграл.""",
     10,
@@ -208,7 +212,7 @@ card_eject = Chunk(
     65,
     4.545250,
 )
-card_tarot = Chunk(
+card_magnum = Chunk(
     "Эта карта удваивает урон, если патрон окажется боевым.", 66, 3.657125
 )
 card_holder = Chunk(
@@ -239,6 +243,52 @@ magazine_is_empty = Chunk("Магазин пуст! Нужно передёрн�
 
 shut_master = Chunk("Стреляет главный игрок.", 73, 1.515063)
 shut_slave = Chunk("Стреляет второй игрок.", 74, 1.619563)
+
+steal_one_card = Chunk(
+    "Забери одну карту у другого игрока и сразу используй ее. Оставлять на потом нельзя.",
+    75,
+    0,
+)
+nothing_steal = Chunk(
+    "У игрока нет карт. Забирать нечего.",
+    76,
+    0,
+)
+card_applied = Chunk(
+    "Ты использовал карту. Убери ее в сброс.",
+    77,
+    0,
+)
+steal_required = Chunk(
+    "Сперва ты должен забрать карту, и использовать ее!",
+    78,
+    0,
+)
+
+clue_on_screen = Chunk("[Подсказка]", 79, 0)  # Подсказка на экране
+hmm = Chunk("Хмм", 80, 0)
+
+dummy = Chunk("Холостой", 81, 0)
+lethal = Chunk("Боевой", 82, 0)
+
+do_eject = Chunk("Передерни затвор, чтобы выбросить текущий патрон.", 83, 0)
+do_look = Chunk("Отведи затвор, и подсмотри патрон в патроннике.", 84, 0)
+
+silent_digits = [
+    Chunk.silent("0"),
+    Chunk.silent("1"),
+    Chunk.silent("2"),
+    Chunk.silent("3"),
+    Chunk.silent("4"),
+    Chunk.silent("5"),
+    Chunk.silent("6"),
+    Chunk.silent("7"),
+    Chunk.silent("8"),
+    Chunk.silent("9"),
+]
+
+silent_dummy = Chunk.silent("патрон холостой")
+silent_lethal = Chunk.silent("патрон боевой")
 
 gun_empty = Chunk("[Пусто]", 1, 0.182857, folder=Folder.GUN)
 gun_cartridge_dummy = Chunk("[Холостой]", 2, 0.313469, folder=Folder.GUN)
