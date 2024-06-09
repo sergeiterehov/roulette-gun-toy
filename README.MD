@@ -56,7 +56,7 @@
 
 ## Корпус (в процессе)
 
-Разрабатывается в https://cad.onshape.com
+Разрабатывается в [cad.onshape.com](https://cad.onshape.com/documents/0767e54667b4ed94683a9e11/w/8be1474497c765f8d466d31e/e/070c12cb1d6e120e55d5ef76?renderMode=0&uiState=6666123c0d16ac2df1635637)
 
 ![Скриншот из CAD](doc/cad_demo.png)
 
