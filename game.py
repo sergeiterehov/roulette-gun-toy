@@ -10,27 +10,17 @@ import utils
 
 
 class State:
+    _ = 0
     IDLE = 1
-    SELECT_MASTER = 2
+    MASTER_SELECTION = 2
     SHUTTING = 3
-    EMPTY_MAGAZINE = 4
-    DONE = 5
-
-
-State_idle = 0
-State_reload_to_start = 1
-State_ok_to_before_select_master = 2
-State_shut_to_select_master = 3
-State_ok_to_read_main_rules = 4
-State_shut_to_play = 5
-State_ok_to_continue_shutting = 6
-State_reload_to_continue_shutting = 7
-State_ok_to_exit = 8
-State_ok_to_continue_shutting_after_cards = 9
+    EXTRACTING = 4
+    EMPTY_MAGAZINE = 5
+    DONE = 6
 
 
 class Game:
-    state = State_idle
+    state = State._
 
     gun = Gun()
     pointed_forward = False
@@ -42,7 +32,7 @@ class Game:
     shutter = master
 
     score = Score(3)
-    health = Health([master, slave], maximum=5)
+    health = Health([master, slave], maximum=6)
 
     cards = Cards([master, slave], maximum=8)
 
@@ -51,11 +41,15 @@ class Game:
 
     message: list[scenario.Chunk] = []
 
+    handle_ok = None
+    handle_shut = None
+    handle_reload = None
+
     on_tell = None
     on_monit = None
 
     def reset(self):
-        self.state = State_idle
+        self.state = State._
 
         self.gun.reset()
         self.pointed_forward = False
@@ -83,49 +77,41 @@ class Game:
     def begin(self):
         self._tell(scenario.call_master)
 
-        self.state = State_reload_to_start
+        self.state = State.IDLE
+
+        self._set_handlers(reload=self._start)
 
     def reload(self):
-        if self.state == State_reload_to_start:
-            self._start()
-        elif self.state == State_reload_to_continue_shutting:
-            self._before_reload()
+        if not self.handle_reload is None:
+            self.handle_reload()
 
     def shut(self):
-        if self.state == State_shut_to_select_master:
-            self._select_master()
-        elif self.state == State_shut_to_play:
-            self._shut()
+        if not self.handle_shut is None:
+            self.handle_shut()
 
     def ok(self):
-        if self.state == State_ok_to_before_select_master:
-            self._before_select_master()
-        elif self.state == State_ok_to_read_main_rules:
-            self._read_main_rules()
-        elif self.state == State_ok_to_continue_shutting:
-            self._continue_shutting()
-        elif self.state == State_ok_to_continue_shutting_after_cards:
-            self._reload_and_continue_shutting()
-        elif self.state == State_ok_to_exit:
-            self._exit()
+        if not self.handle_ok is None:
+            self.handle_ok()
 
     def _start(self):
         self._clear_message()
         self._tell(scenario.master_called)
 
-        self.state = State_ok_to_before_select_master
+        self.state = State.MASTER_SELECTION
 
-    def _before_select_master(self):
+        self._set_handlers(ok=self._explain_master_selection)
+
+    def _explain_master_selection(self):
         self._clear_message()
         self._tell(scenario.select_first_player)
 
-        self.state = State_shut_to_select_master
+        self._set_handlers(shut=self._select_master)
 
     def _select_master(self):
+        self.health.reset(random.choice([2, 3, 4]))
+
         self.first = random.choice([self.master, self.slave])
         master_first = self.first == self.master
-
-        self.health.reset(4)
 
         self._clear_message()
         self._tell(
@@ -141,26 +127,16 @@ class Game:
         )
         self._tell(scenario.after_first_player_is)
 
-        self.state = State_ok_to_read_main_rules
-
-    def _read_main_rules(self):
-        master_first = self.first == self.master
-
-        self._clear_message()
         self._tell(scenario.main_rules)
         self._tell(scenario.prepare_cards)
-        self._load()
-        self.shutter = self.first
-        self._tell(scenario.order_is_unknown)
-        self._tell(scenario.shut_rules)
-        self._tell(scenario.first_master if master_first else scenario.first_slave)
-        self._tell(scenario.first_is_permanent)
 
-        self.state = State_shut_to_play
+        self.state = State.SHUTTING
+
+        self._set_handlers(reload=self._load_and_continue_shutting)
 
     def _shut(self):
         if self.gun.empty():
-            # Но такого быть не должно!
+            # TODO: добавить звук?
             return
 
         self.total_shots += 1
@@ -170,12 +146,7 @@ class Game:
 
         self._clear_message()
 
-        if not is_lethal:
-            self.shutter = self.slave if self.shutter == self.master else self.master
-            self._monit()
-
-            self.state = State_ok_to_continue_shutting
-            return
+        # TODO: добавить звук!
 
         victim: Player
 
@@ -184,100 +155,139 @@ class Game:
         else:
             victim = self.master if is_forward else self.slave
 
-        self.health.reduce(victim)
-        self._monit()
-
-        self._tell(
-            random.choice(
-                [
-                    scenario.after_shut_1,
-                    scenario.after_shut_2,
-                    scenario.after_shut_3,
-                ]
-            )
-        )
-
-        if self.total_shots == 1:
-            self._tell(scenario.info_screen_is_helpful)
+        if is_lethal:
+            self.health.reduce(victim)
 
         if self.health.get(victim) <= 0:
+            # Здоровье жертвы закончилось
             self._tell(
                 scenario.round_of_master
-                if self.shutter == self.master
+                if victim == self.slave
                 else scenario.round_of_slave
             )
 
             self.score.put_winner(self.shutter)
 
             if self.score.is_final():
-                self.state = State_ok_to_exit
+                # Это был финальный выстрел, нужно определить победителя
+                self._game_over()
             else:
-                # FIXME: перезарядить, сдать карты и начать следующий раунд
-                self.state = (
-                    State_reload_to_continue_shutting  # FIXME: это временное решение
+                # Выстрел оканчивает раунд
+                self._set_handlers(reload=self._start_new_round)
+        else:
+            self.state = State.EXTRACTING
+
+            if is_lethal:
+                # Говорим, что жертва еще поживет
+                self._tell(
+                    random.choice(
+                        [
+                            scenario.after_shut_1,
+                            scenario.after_shut_2,
+                            scenario.after_shut_3,
+                        ]
+                    )
                 )
 
-            return
+            if not self.gun.empty():
+                # Если магазин пуст, то будет смена
+                # TODO: можно перенести это после перезарядки, так будет интересней
+                if not is_forward and not is_lethal:
+                    # Продолжаем ход, если стреляли в себя и был холостой
+                    self._tell(scenario.not_change)
+                else:
+                    # Переход хода
+                    self.shutter = (
+                        self.slave if self.shutter == self.master else self.master
+                    )
 
-        self._tell(scenario.change if is_forward else scenario.not_change)
+                    self._tell(scenario.change)
+                    self._tell(
+                        scenario.shut_master
+                        if self.shutter == self.master
+                        else scenario.shut_slave
+                    )
+
+            if self.total_shots == 1:
+                # После первого выстрела рассказываем про полезность экрана
+                self._tell(scenario.info_screen_is_helpful)
+
+            self._set_handlers(reload=self._eject_and_continue_shutting)
+
+        self._monit()
+
+    def _eject_and_continue_shutting(self):
+        self._clear_message()
+
+        # TODO: Звук извлечения?
 
         if self.gun.empty():
+            # Нужна перезарядка
             self._tell(scenario.magazine_is_empty)
 
-            self.state = State_reload_to_continue_shutting
-        else:
-            self.state = State_ok_to_continue_shutting
+            self.state = State.EMPTY_MAGAZINE
 
-    def _before_reload(self):
+            self._set_handlers(reload=self._give_cards_and_load)
+        else:
+            self._set_handlers(shut=self._shut)
+
+    def _start_new_round(self):
+        self._clear_message()
+
+        current_round = len(self.score.history)
+
+        if current_round == 1:
+            self.health.reset(random.choice([3, 4, 5]))
+        elif current_round == 2:
+            self.health.reset(random.choice([4, 5, 6]))
+
+        self.cards.reset()
+        self._tell(scenario.reorder_cards)
+
+        self._set_handlers(reload=self._give_cards_and_load)
+
+    def _give_cards_and_load(self):
         self._clear_message()
 
         if self.total_cards == 0:
+            # Если это первая раздача, то нужно объяснить смысл карт
             self._tell(scenario.before_explain_cards)
-
-            # TODO: сейчас говорит перемешать, карты, а мы сами их выдаем здесь
-            self._shuffle_cards()
+            self.cards.reset()
 
         # TODO: перемешивать, если не осталось
 
-        amount = random.randint(1, self.cards.maximum - 3)
+        self._give_cards()
 
-        self.cards.add(amount)
-        self.total_cards += amount
-        self._monit()
+        self._set_handlers(ok=self._load_and_continue_shutting)
 
-        self._tell(
-            [
-                None,
-                scenario.take_1_cards,
-                scenario.take_2_cards,
-                scenario.take_3_cards,
-                scenario.take_4_cards,
-                scenario.take_5_cards,
-            ][amount]
-        )
-
-        self.state = State_ok_to_continue_shutting_after_cards
-
-    def _reload_and_continue_shutting(self):
-        self.shutter = self.first
+    def _load_and_continue_shutting(self):
+        self._clear_message()
 
         self._load()
+        self.shutter = self.first
 
-        self.state = State_shut_to_play
+        self._tell(
+            scenario.first_master if self.first == self.master else scenario.first_slave
+        )
 
-    def _continue_shutting(self):
-        self.state = State_shut_to_play
+        self.state = State.SHUTTING
 
-    def _exit(self):
+        self._set_handlers(shut=self._shut)
+
+    def _game_over(self):
         winner = self.score.get_leader()
 
         self._clear_message()
         self._tell(scenario.win_master if winner == self.master else scenario.win_slave)
         self._tell(scenario.goodby)
 
-        self.state = State_idle
+        self.state = State.DONE
+
+        self._set_handlers()
 
     def _load(self, amount: int = None, amount_live: int = None):
+        # TODO: звук перезарядки?
+
         if amount == None:
             amount = random.randint(2, 8)
         if amount_live == None:
@@ -331,14 +341,39 @@ class Game:
             ][amount_live]
         )
 
-    def _shuffle_cards(self):
-        self.cards.reset()
+        if self.total_shots == 0:
+            self._tell(scenario.order_is_unknown)
+            self._tell(scenario.shut_rules)
+            self._tell(scenario.first_is_permanent)
 
-        stack = self.cards.make_stack()
-        utils.shuffle(stack)
+    def _give_cards(self):
+        amount = random.randint(1, self.cards.maximum - 3)
+
+        self.cards.add(amount)
+        self.total_cards += amount
+        self._monit()
+
+        self._tell(
+            [
+                None,
+                scenario.take_1_cards,
+                scenario.take_2_cards,
+                scenario.take_3_cards,
+                scenario.take_4_cards,
+                scenario.take_5_cards,
+            ][amount]
+        )
+
+    def _set_handlers(self, ok=None, shut=None, reload=None):
+        self.handle_ok = ok
+        self.handle_shut = shut
+        self.handle_reload = reload
 
     def _clear_message(self):
         self.message.clear()
+
+        if not self.on_tell is None:
+            self.on_tell()
 
     def _tell(self, chunk: scenario.Chunk):
         self.message.append(chunk)
@@ -350,6 +385,7 @@ class Game:
         if not self.on_monit is None:
             self.on_monit()
 
+    def print_state(self):
         print(
             "[MONIT]: [!%s/%s]cases->(%s) health(%s:%s)"
             % (
@@ -360,11 +396,6 @@ class Game:
                 self.health.get(self.slave),
             )
         )
-        print(
-            "Master cards: %s"
-            % " | ".join([str(c.type) for c in self.cards.get_credit(self.master)])
-        )
-        print(
-            "Slave cards:  %s"
-            % " | ".join([str(c.type) for c in self.cards.get_credit(self.slave)])
-        )
+        print("Shutter: %s" % "MASTER" if self.shutter == self.master else "SLAVE")
+        print("Master cards: %s" % self.cards.get_by_player(self.master))
+        print("Slave cards: %s" % self.cards.get_by_player(self.slave))

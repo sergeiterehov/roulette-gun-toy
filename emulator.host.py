@@ -1,6 +1,14 @@
+import os
 from game import Game
 
+def handle_tell():
+  os.system('clear')
+  print(" ".join([m.text for m in game.message]))
+  game.print_state()
+
 game = Game()
+
+game.on_tell = handle_tell
 
 game.reset()
 game.begin()

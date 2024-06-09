@@ -4,7 +4,7 @@ class Health:
   values: dict[Player, int] = {}
   maximum = 1
 
-  def __init__(self, players: list[Player], maximum: int = 5) -> None:
+  def __init__(self, players: list[Player], maximum: int = 6) -> None:
     self.maximum = maximum
 
     for player in players:

@@ -13,47 +13,35 @@ class CardType:
     CHANCE = 9
 
 
-class Card:
-    type: CardType = CardType.LOOK
-
-    def __init__(self, type: CardType) -> None:
-        self.type = type
-
-
 class Cards:
-    lib: list[Card] = []
-    stack: list[Card] = []
-
-    owned: dict[Player, list[Card]] = {}
-
+    library: int = 0
     maximum = 1
 
-    def __init__(self, players: list[Player], maximum: int = 8) -> None:
-        self.maximum = maximum
+    stack: int = 0
+    over: int = 0
+    owned: dict[Player, int] = {}
 
-        for type in range(1, 9):
-            for _ in range(maximum):
-                self.lib.append(Card(type))
+    def __init__(
+        self, players: list[Player], maximum: int = 8, library: int = 25
+    ) -> None:
+        self.maximum = maximum
+        self.library = library
+
+        self.over = 0
+        self.stack = self.library
 
         for player in players:
-            self.owned[player] = []
+            self.owned[player] = 0
 
     def reset(self):
-        self.stack = []
+        self.over = 0
+        self.stack = self.library
 
         for player in self.owned.keys():
-            self.owned[player] = []
+            self.owned[player] = 0
 
-    def get_credit(self, player: Player):
+    def get_by_player(self, player: Player):
         return self.owned[player]
-
-    def make_stack(self):
-        for player in self.owned.keys():
-            self.owned[player] = []
-
-        self.stack = [e for e in self.lib]
-
-        return self.stack
 
     def add(self, amount: int = None):
         if amount == None:
@@ -62,15 +50,12 @@ class Cards:
         amount = min(self.maximum, max(0, amount))
 
         for player in self.owned.keys():
-            current = len(self.owned[player])
+            current = self.owned[player]
             diff = min(self.maximum, current + amount) - current
 
-            for _ in range(diff):
-                card = self.stack.pop()
-                self.owned[player].append(card)
+            self.stack -= diff
+            self.owned[player] += diff
 
-    def validate(self, player: Player, card: Card):
-        return card in self.owned[player]
-
-    def use(self, player: Player, card: Card):
-        self.owned[player].remove(card)
+    def use(self, player: Player):
+        self.owned[player] -= 1
+        self.over += 1

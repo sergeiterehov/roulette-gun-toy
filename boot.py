@@ -57,6 +57,7 @@ interface = Interface(display)
 # Функции
 
 playing_task = None
+last_press_ms = 0
 
 
 async def play_audio(file=1, duration=0.0):
@@ -84,6 +85,17 @@ async def play_messages():
 
 
 def handle_press_button(key):
+    # Сперва реализуем debounce
+    global last_press_ms
+
+    now_ms = time.ticks_ms()
+
+    if now_ms - last_press_ms < 200:
+        return
+    
+    last_press_ms = now_ms
+
+    # Затем, определяем обработчик события
     if key == Button_reload:
         game.reload()
     elif key == Button_trigger:
