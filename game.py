@@ -108,12 +108,17 @@ class Game:
         self._set_handlers(shut=self._select_master)
 
     def _select_master(self):
+        self._clear_message()
+
         self.health.reset(random.choice([2, 3, 4]))
 
-        self.first = random.choice([self.master, self.slave])
+        is_lethal = random.choice([False, True])
+
+        self._tell(scenario.gun_a_1 if is_lethal else scenario.gun_cartridge_dummy)
+
+        self.first = self.master if is_lethal else self.slave
         master_first = self.first == self.master
 
-        self._clear_message()
         self._tell(
             scenario.before_first_player_is_master
             if master_first
@@ -135,8 +140,10 @@ class Game:
         self._set_handlers(reload=self._load_and_continue_shutting)
 
     def _shut(self):
+        self._clear_message()
+
         if self.gun.empty():
-            # TODO: добавить звук?
+            self._tell(scenario.gun_empty)
             return
 
         self.total_shots += 1
@@ -144,9 +151,18 @@ class Game:
         is_forward = self.pointed_forward
         is_lethal = self.gun.shut()
 
-        self._clear_message()
-
-        # TODO: добавить звук!
+        if is_lethal:
+            self._tell(
+                random.choice(
+                    [
+                        scenario.gun_a_1,
+                        scenario.gun_a_2,
+                        scenario.gun_a_3,
+                    ]
+                )
+            )
+        else:
+            self._tell(scenario.gun_cartridge_dummy)
 
         victim: Player
 
@@ -219,8 +235,6 @@ class Game:
     def _eject_and_continue_shutting(self):
         self._clear_message()
 
-        # TODO: Звук извлечения?
-
         if self.gun.empty():
             # Нужна перезарядка
             self._tell(scenario.magazine_is_empty)
@@ -286,7 +300,7 @@ class Game:
         self._set_handlers()
 
     def _load(self, amount: int = None, amount_live: int = None):
-        # TODO: звук перезарядки?
+        self._tell(scenario.gun_reload)
 
         if amount == None:
             amount = random.randint(2, 8)
@@ -302,7 +316,6 @@ class Game:
 
         self._monit()
 
-        self._clear_message()
         self._tell(
             [
                 None,

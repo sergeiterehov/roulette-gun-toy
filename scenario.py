@@ -2,14 +2,29 @@ reading_speed_cps = 13
 """Chars per second"""
 
 
+class Folder:
+    """Папки в привязке к DFPlayer"""
+
+    SARAH = 1
+    GUN = 2
+
+
 class Chunk:
     text = ""
-    audio = ""
+    audio = 0
     duration = 0
+    folder = 1
 
-    def __init__(self, text: str, audio: str = "", duration: float = None):
+    def __init__(
+        self,
+        text: str,
+        audio: int = 0,
+        duration: float = None,
+        folder: int = Folder.SARAH,
+    ):
         self.text = text.replace("\n", " ")
         self.audio = audio
+        self.folder = folder
         self.duration = len(text) / reading_speed_cps if duration is None else duration
 
 
@@ -224,3 +239,15 @@ magazine_is_empty = Chunk("Магазин пуст! Нужно передёрн�
 
 shut_master = Chunk("Стреляет главный игрок.", 73, 1.515063)
 shut_slave = Chunk("Стреляет второй игрок.", 74, 1.619563)
+
+gun_empty = Chunk("[Пусто]", 1, 0.182857, folder=Folder.GUN)
+gun_cartridge_dummy = Chunk("[Холостой]", 2, 0.313469, folder=Folder.GUN)
+gun_reload = Chunk("[Перезарядка]", 3, 2.560000, folder=Folder.GUN)
+
+gun_a_1 = Chunk("[Выстрел]", 4, 3.291429, folder=Folder.GUN)
+gun_a_2 = Chunk("[Выстрел]", 5, 2.768980, folder=Folder.GUN)
+gun_a_3 = Chunk("[Выстрел]", 6, 3.160816, folder=Folder.GUN)
+
+gun_b_1 = Chunk("[Выстрел]", 7, 3.526531, folder=Folder.GUN)
+gun_b_2 = Chunk("[Выстрел]", 8, 3.448163, folder=Folder.GUN)
+gun_b_3 = Chunk("[Выстрел]", 9, 3.970612, folder=Folder.GUN)

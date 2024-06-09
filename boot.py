@@ -15,6 +15,9 @@ from interface import Interface
 from mfrc522 import MFRC522
 
 
+ENABLE_AUDIO = True
+
+
 # components
 i2c = SoftI2C(scl=Pin(5), sda=Pin(4))
 uart = UART(1, 9600, bits=8, parity=None, stop=1, tx=10, rx=9)
@@ -41,8 +44,13 @@ mpu = MPU6050(i2c)
 
 # Player
 df = DFPlayer(uart)
-time.sleep(0.2)
-df.volume(20)
+time.sleep(0.1)
+df.reset()
+time.sleep(0.1)
+df.volume(20)  # TODO: не хватает питания для большей громкости. плохой контакт??
+time.sleep(0.1)
+df.play(1, 1)
+
 
 # RFID
 rfid = MFRC522(spi, rfid_rst, rfid_cs)
@@ -60,25 +68,22 @@ playing_task = None
 last_press_ms = 0
 
 
-async def play_audio(file=1, duration=0.0):
-    print("PLAY %s" % file)
-
-    df.play(1, file)
-    await asyncio.sleep(duration + 0.2)
-
-    while df.is_playing() != 0:
-        await asyncio.sleep(0.1)
-
-    print("PLAYED!! %s" % file)
-
-
 async def play_messages():
     global playing_task
 
     try:
         for msg in game.message:
-            await play_audio(msg.audio, msg.duration)
+            print("PLAY %s/%s" % (msg.folder, msg.audio))
+
+            df.play(msg.folder, msg.audio)
+            await asyncio.sleep(msg.duration + 0.2)
+
+            while df.is_playing() != 0:
+                await asyncio.sleep(0.1)
+
+            print("PLAYED!!")
     except asyncio.CancelledError:
+        df.stop()
         raise
     finally:
         playing_task = None
@@ -92,7 +97,7 @@ def handle_press_button(key):
 
     if now_ms - last_press_ms < 200:
         return
-    
+
     last_press_ms = now_ms
 
     # Затем, определяем обработчик события
@@ -115,8 +120,8 @@ def handle_tell():
         # FIXME: нужно прерывать таску, даже если она исполняется. Не делать через event loop?
         playing_task.cancel()
 
-    # TODO: перестало работать :-(
-    # playing_task = asyncio.create_task(play_messages())
+    if ENABLE_AUDIO:
+        playing_task = asyncio.create_task(play_messages())
 
     message = " ".join([msg.text for msg in game.message])
 
@@ -190,7 +195,9 @@ def rfid_read():
         print("Failed to select tag")
         return
 
-    uid = int.from_bytes(bytearray([raw_uid[0], raw_uid[1], raw_uid[2], raw_uid[3]]), "big")
+    uid = int.from_bytes(
+        bytearray([raw_uid[0], raw_uid[1], raw_uid[2], raw_uid[3]]), "big"
+    )
 
     print("New card detected: %s (type %s)" % (hex(uid), tag_type))
 
